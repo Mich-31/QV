@@ -85,75 +85,77 @@ def Fourier_loss_derivative(output, target, weights, bias, Img):
 
     return weights_derivative, bias_derivative
 
-def update_rule(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWeights, lrBias):
-    """ Parameters update rule of the gradient descent algorithm. """
-    new_weights = weights - lrWeights*np.mean(lossWeightsDerivatives, axis=0)
-    new_bias = bias - lrBias*np.mean(lossBiasDerivatives, axis=0)
-    return new_weights, new_bias
-
-def optimization(loss_derivative: Callable, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs, lrWeights, lrBias, num_shots):
-    """ Gradient descent optimization. """
-    # Training set
-    outputs = np.array([neuron(weights, bias, trainImgs[idx,:,:], num_shots) for idx in range(trainImgs.shape[0])])
-
-    losses = np.array([loss(outputs[idx], targets[idx]) for idx in range(outputs.shape[0])])
-
-    # History initialization
-    loss_history = [np.mean(losses)]
-    accuracy_history = [accuracy(outputs, targets)]
-
-    # Weights initialization
-    lossWeightsDerivatives = np.zeros(trainImgs.shape)
-    lossBiasDerivatives = np.zeros(trainImgs.shape[0])
-
-    # Compute derivates of the loss function
-    for idx in range(trainImgs.shape[0]):
-        lossWeightsDerivatives[idx,:,:], lossBiasDerivatives[idx] = loss_derivative(outputs[idx], targets[idx], weights, bias, trainImgs[idx,:,:])
-
-    # Validation set
-    test_outputs = np.array([neuron(weights, bias, testImgs[idx,:,:], num_shots) for idx in range(testImgs.shape[0])])
-    test_losses = np.array([loss(test_outputs[idx], test_targets[idx]) for idx in range(test_outputs.shape[0])])
-
-    test_loss_history = [np.mean(test_losses)]
-    test_accuracy_history = [accuracy(test_outputs, test_targets)]
-
-    # Verbose
-    print('EPOCH', 0)
-    print('Loss', loss_history[0], 'Val_Loss', test_loss_history[0])
-    print('Accuracy', accuracy_history[0], 'Val_Acc', test_accuracy_history[0])
-    print('---')
-
-    for epoch in range(num_epochs):
-        # Update weights
-        weights, bias = update_rule(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWeights, lrBias)
-
-        # Training set
-        outputs = np.array([neuron(weights, bias, trainImgs[idx,:,:], num_shots) for idx in range(trainImgs.shape[0])])
-        losses = np.array([loss(outputs[idx], targets[idx]) for idx in range(outputs.shape[0])])
-        loss_history.append(np.mean(losses))
-
-        # Update accuracy
-        accuracy_history.append(accuracy(outputs, targets))
-
-        # Validation set
-        test_outputs = np.array([neuron(weights, bias, testImgs[idx,:,:], num_shots) for idx in range(testImgs.shape[0])])
-        test_losses = np.array([loss(test_outputs[idx], test_targets[idx]) for idx in range(test_outputs.shape[0])])
-        test_loss_history.append(np.mean(test_losses))
-        test_accuracy_history.append(accuracy(test_outputs, test_targets))
-
-        # Update loss derivative
-        for idx in range(trainImgs.shape[0]):
-            lossWeightsDerivatives[idx,:,:], lossBiasDerivatives[idx] = loss_derivative(outputs[idx], targets[idx], weights, bias, trainImgs[idx,:,:])
-
-        # Verbose
-        print('EPOCH', epoch + 1)
-        print('Loss', loss_history[epoch + 1], 'Val_Loss', test_loss_history[epoch + 1])
-        print('Accuracy', accuracy_history[epoch + 1], 'Val_Acc', test_accuracy_history[epoch + 1])
-        print('---')
-
-    return weights, bias, loss_history, test_loss_history, accuracy_history, test_accuracy_history
+# def update_rule(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWeights, lrBias):
+#     """ Parameters update rule of the gradient descent algorithm. """
+#     new_weights = weights - lrWeights*np.mean(lossWeightsDerivatives, axis=0)
+#     new_bias = bias - lrBias*np.mean(lossBiasDerivatives, axis=0)
+#     return new_weights, new_bias
+#
+# def optimization(loss_derivative: Callable, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs, lrWeights, lrBias, num_shots):
+#     """ Gradient descent optimization. """
+#     # Training set
+#     outputs = np.array([neuron(weights, bias, trainImgs[idx,:,:], num_shots) for idx in range(trainImgs.shape[0])])
+#
+#     losses = np.array([loss(outputs[idx], targets[idx]) for idx in range(outputs.shape[0])])
+#
+#     # History initialization
+#     loss_history = [np.mean(losses)]
+#     accuracy_history = [accuracy(outputs, targets)]
+#
+#     # Weights initialization
+#     lossWeightsDerivatives = np.zeros(trainImgs.shape)
+#     lossBiasDerivatives = np.zeros(trainImgs.shape[0])
+#
+#     # Compute derivates of the loss function
+#     for idx in range(trainImgs.shape[0]):
+#         lossWeightsDerivatives[idx,:,:], lossBiasDerivatives[idx] = loss_derivative(outputs[idx], targets[idx], weights, bias, trainImgs[idx,:,:])
+#
+#     # Validation set
+#     test_outputs = np.array([neuron(weights, bias, testImgs[idx,:,:], num_shots) for idx in range(testImgs.shape[0])])
+#     test_losses = np.array([loss(test_outputs[idx], test_targets[idx]) for idx in range(test_outputs.shape[0])])
+#
+#     test_loss_history = [np.mean(test_losses)]
+#     test_accuracy_history = [accuracy(test_outputs, test_targets)]
+#
+#     # Verbose
+#     print('EPOCH', 0)
+#     print('Loss', loss_history[0], 'Val_Loss', test_loss_history[0])
+#     print('Accuracy', accuracy_history[0], 'Val_Acc', test_accuracy_history[0])
+#     print('---')
+#
+#     for epoch in range(num_epochs):
+#         # Update weights
+#         weights, bias = update_rule(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWeights, lrBias)
+#
+#         # Training set
+#         outputs = np.array([neuron(weights, bias, trainImgs[idx,:,:], num_shots) for idx in range(trainImgs.shape[0])])
+#         losses = np.array([loss(outputs[idx], targets[idx]) for idx in range(outputs.shape[0])])
+#         loss_history.append(np.mean(losses))
+#
+#         # Update accuracy
+#         accuracy_history.append(accuracy(outputs, targets))
+#
+#         # Validation set
+#         test_outputs = np.array([neuron(weights, bias, testImgs[idx,:,:], num_shots) for idx in range(testImgs.shape[0])])
+#         test_losses = np.array([loss(test_outputs[idx], test_targets[idx]) for idx in range(test_outputs.shape[0])])
+#         test_loss_history.append(np.mean(test_losses))
+#         test_accuracy_history.append(accuracy(test_outputs, test_targets))
+#
+#         # Update loss derivative
+#         for idx in range(trainImgs.shape[0]):
+#             lossWeightsDerivatives[idx,:,:], lossBiasDerivatives[idx] = loss_derivative(outputs[idx], targets[idx], weights, bias, trainImgs[idx,:,:])
+#
+#         # Verbose
+#         print('EPOCH', epoch + 1)
+#         print('Loss', loss_history[epoch + 1], 'Val_Loss', test_loss_history[epoch + 1])
+#         print('Accuracy', accuracy_history[epoch + 1], 'Val_Acc', test_accuracy_history[epoch + 1])
+#         print('---')
+#
+#     return weights, bias, loss_history, test_loss_history, accuracy_history, test_accuracy_history
 
 def optimizer(optimizer, loss_derivative: Callable, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs, lrWeights, lrBias, num_shots):
+    if optimizer == 'gd':
+        return optimization_standard_gd(loss_derivative, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs,lrWeights, lrBias, num_shots)
     if optimizer == 'rmsprop':
          return optimization_rmsprop(loss_derivative, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs,lrWeights, lrBias, num_shots, decay_rate=0.9, epsilon=1e-8)
     elif optimizer == 'adam':
@@ -246,6 +248,12 @@ def common_optimization(
         print('---')
 
     return weights, bias, loss_history, test_loss_history, accuracy_history, test_accuracy_history
+
+def standard_gd_update(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWeights, lrBias, cache):
+    """ Parameters update rule of the gradient descent algorithm. """
+    new_weights = weights - lrWeights * np.mean(lossWeightsDerivatives, axis=0)
+    new_bias = bias - lrBias * np.mean(lossBiasDerivatives, axis=0)
+    return new_weights, new_bias, cache
 
 # Define the AdaDelta update function
 def adadelta_update(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWeights, lrBias, cache, epsilon=1e-8, rho=0.9):
@@ -398,6 +406,15 @@ def adam_update(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWe
     bias -= lrBias * m_hat_bias / (np.sqrt(v_hat_bias) + epsilon)
 
     return weights, bias, {'m_weights': m_weights, 'v_weights': v_weights, 'm_bias': m_bias, 'v_bias': v_bias}
+
+def optimization_standard_gd(
+        loss_derivative: Callable, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs,
+        lrWeights, lrBias, num_shots
+):
+    return common_optimization(
+        loss_derivative, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs,
+        lrWeights, lrBias, num_shots, standard_gd_update
+    )
 
 
 # RMSProp optimization function
