@@ -48,9 +48,10 @@ def neuron(weights, bias, Img, num_shots, max_iterations=100, tolerance=1e-6):
     Target = weights
     Retrieved_Phase = gerchberg_saxton(Source, Target, max_iterations, tolerance)
     modulated_Img = Img * np.exp(1j * Retrieved_Phase)
-    retrieved_weights = np.abs(modulated_Img)
-    norm = np.sqrt(np.sum(np.square(retrieved_weights)))
-    prob = np.abs(np.sum(np.multiply(modulated_Img, retrieved_weights/norm)))**2
+    # retrieved_weights = np.abs(modulated_Img)
+    # norm = np.sqrt(np.sum(np.square(weights)))
+    # prob = np.abs(np.sum(np.multiply(modulated_Img, weights/norm)))**2
+    prob = np.abs(np.sum(modulated_Img * np.conj(weights)))**2
 
     if num_shots == -1:
         f = prob
@@ -78,10 +79,10 @@ def spatial_loss_derivative(output, target, weights, bias, Img):
     Target = weights
     Retrieved_Phase = gerchberg_saxton(Source, Target)
     modulated_Img = Img * np.exp(1j * Retrieved_Phase)
-    retrieved_weights = np.abs(modulated_Img)
+    # retrieved_weights = np.abs(modulated_Img)
 
-    g = np.sum(np.multiply(modulated_Img, retrieved_weights / norm))  # <I, U>
-    gPrime = (modulated_Img - g * retrieved_weights / norm) / norm  # <I, dlambdaU>
+    g = np.sum(np.multiply(modulated_Img, weights / norm))  # <I, U>
+    gPrime = (modulated_Img - g * weights / norm) / norm  # <I, dlambdaU>
 
     fPrime = 2 * np.real(g * np.conjugate(gPrime))  # 2Re[<I, U><I, dU>*]
 
@@ -112,12 +113,12 @@ def Fourier_loss_derivative(output, target, weights, bias, Img):
     Target = weights
     Retrieved_Phase = gerchberg_saxton(Source, Target)
     modulated_Img = Img * np.exp(1j * Retrieved_Phase)
-    retrieved_weights = np.abs(modulated_Img)
+    # retrieved_weights = np.abs(modulated_Img)
 
-    g = np.sum(np.multiply(modulated_Img, retrieved_weights / norm))  # <I, U>
+    g = np.sum(np.multiply(modulated_Img, weights / norm))  # <I, U>
     gAbs = np.abs(g)  # sqrt(f)
 
-    gPrime = (modulated_Img - gAbs * retrieved_weights / norm) / norm  # Approximation
+    gPrime = (modulated_Img - gAbs * weights / norm) / norm  # Approximation
     fPrime = 2 * np.real(gAbs * np.conjugate(gPrime))  # Approximation
 
     crossPrime = (F - y) / (F * (1 - F))
