@@ -5,14 +5,53 @@ import numpy as np
 from typing import Callable, Tuple
 
 from .utils import sig, sigPrime, loss, accuracy
+from numpy.fft import fft2, ifft2
 
-def neuron(weights, bias, Img, num_shots):
-    """ Compute the output of the quantum optical neuron, with parameters
-        weights and bias, and input Img. The predicted probability is sampled
-        for a given number of shots (deactived by choosing shots = -1). """
-    norm = np.sqrt(np.sum(np.square(weights)))
-    prob = np.abs(np.sum(np.multiply(Img, weights/norm)))**2
-    # Sampling (1: Coincidence)
+def apply_phase_modulation(Imgs):
+    """
+    Apply phase modulation to the input image.
+    :param Img: np.array, input image.
+    :param phase_shifts: np.array, phase shifts to apply.
+    :return: np.array, phase-modulated image.
+    """
+    modulated_Img = Img * np.exp(1j * phase_shifts)
+    return modulated_Img
+
+ # Amplitude – Amplitude-extracting function:
+ #   e.g. for complex z = x + iy, amplitude(z) = sqrt(x·x + y·y)
+ #       for real x, amplitude(x) = |x|
+ # Phase – Phase extracting function:
+ #   e.g. Phase(z) = arctan(y / x)
+def amplitude(z):
+    return np.abs(z)
+
+def phase(z):
+    return np.angle(z)
+
+def gerchberg_saxton(Source, Target, max_iterations=100, tolerance=1e-6):
+    A = np.fft.ifft2(Target)
+
+    for _ in range(max_iterations):
+        B = amplitude(Source) * np.exp(1j * phase(A))
+        C = np.fft.fft2(B)
+        D = amplitude(Target) * np.exp(1j * phase(C))
+        A = np.fft.ifft2(D)
+
+        if np.linalg.norm(amplitude(A) - amplitude(Source)) < tolerance:
+            break
+
+    Retrieved_Phase = phase(A)
+    return Retrieved_Phase
+
+def neuron(weights, bias, Img, num_shots, max_iterations=100, tolerance=1e-6):
+    Source = Img
+    Target = weights
+    Retrieved_Phase = gerchberg_saxton(Source, Target, max_iterations, tolerance)
+    modulated_Img = Img * np.exp(1j * Retrieved_Phase)
+    retrieved_weights = np.abs(modulated_Img)
+    norm = np.sqrt(np.sum(np.square(retrieved_weights)))
+    prob = np.abs(np.sum(np.multiply(modulated_Img, retrieved_weights/norm)))**2
+
     if num_shots == -1:
         f = prob
     else:
@@ -24,7 +63,6 @@ def neuron(weights, bias, Img, num_shots):
 def spatial_loss_derivative(output, target, weights, bias, Img):
     """ Compute the derivative of the binary cross-entropy with respect to the
         neuron parameters, with spatial-encoded input. """
-    # Check
     if output == 1:
         raise ValueError('Output is 1!')
     elif output <= 0:
@@ -32,31 +70,33 @@ def spatial_loss_derivative(output, target, weights, bias, Img):
     elif 1 - output <= 0:
         raise ValueError('Output is greater than 1!')
 
-    # Declarations
     F = output
     y = target
     norm = np.sqrt(np.sum(np.square(weights)))
 
-    # Compute the derivative with respect to the weights
-    g = np.sum(np.multiply(Img, weights/norm)) # <I, U>
-    gPrime = (Img - g*weights/norm)/norm # <I, dlambdaU>
+    Source = Img
+    Target = weights
+    Retrieved_Phase = gerchberg_saxton(Source, Target)
+    modulated_Img = Img * np.exp(1j * Retrieved_Phase)
+    retrieved_weights = np.abs(modulated_Img)
 
-    fPrime = 2*np.real(g*np.conjugate(gPrime)) # 2Re[<I, U><I, dU>*]
+    g = np.sum(np.multiply(modulated_Img, retrieved_weights / norm))  # <I, U>
+    gPrime = (modulated_Img - g * retrieved_weights / norm) / norm  # <I, dlambdaU>
 
-    crossPrime = (F - y)/(F*(1-F))
+    fPrime = 2 * np.real(g * np.conjugate(gPrime))  # 2Re[<I, U><I, dU>*]
 
-    gAbs = np.abs(g) # sqrt(f)
-    weights_derivative = crossPrime*sigPrime(gAbs**2 + bias)*fPrime
+    crossPrime = (F - y) / (F * (1 - F))
 
-    # Compute the derivative with respect to the bias
-    bias_derivative = crossPrime*sigPrime(gAbs**2 + bias)
+    gAbs = np.abs(g)  # sqrt(f)
+    weights_derivative = crossPrime * sigPrime(gAbs ** 2 + bias) * fPrime
+
+    bias_derivative = crossPrime * sigPrime(gAbs ** 2 + bias)
 
     return weights_derivative, bias_derivative
 
 def Fourier_loss_derivative(output, target, weights, bias, Img):
     """ Compute the derivative of the binary cross-entropy with respect to the
         neuron parameters, with Fourier-encoded input. """
-    # Check
     if output == 1:
         raise ValueError('Output is 1!')
     elif output <= 0:
@@ -64,94 +104,87 @@ def Fourier_loss_derivative(output, target, weights, bias, Img):
     elif 1 - output <= 0:
         raise ValueError('Output is greater than 1!')
 
-    # Declarations
     F = output
     y = target
     norm = np.sqrt(np.sum(np.square(weights)))
 
-    # Compute the derivative with respect to the weights
-    g = np.sum(np.multiply(Img, weights/norm)) # <I, U>
-    gAbs = np.abs(g) # sqrt(f)
+    Source = Img
+    Target = weights
+    Retrieved_Phase = gerchberg_saxton(Source, Target)
+    modulated_Img = Img * np.exp(1j * Retrieved_Phase)
+    retrieved_weights = np.abs(modulated_Img)
 
-    gPrime = (Img - gAbs*weights/norm)/norm # Approximation
-    fPrime = 2*np.real(gAbs*np.conjugate(gPrime)) # Approximation
+    g = np.sum(np.multiply(modulated_Img, retrieved_weights / norm))  # <I, U>
+    gAbs = np.abs(g)  # sqrt(f)
 
-    crossPrime = (F - y)/(F*(1-F))
+    gPrime = (modulated_Img - gAbs * retrieved_weights / norm) / norm  # Approximation
+    fPrime = 2 * np.real(gAbs * np.conjugate(gPrime))  # Approximation
 
-    weights_derivative = crossPrime*sigPrime(gAbs**2 + bias)*fPrime
+    crossPrime = (F - y) / (F * (1 - F))
 
-    # Compute the derivative with respect to the bias
-    bias_derivative = crossPrime*sigPrime(gAbs**2 + bias)
+    weights_derivative = crossPrime * sigPrime(gAbs ** 2 + bias) * fPrime
+
+    bias_derivative = crossPrime * sigPrime(gAbs ** 2 + bias)
 
     return weights_derivative, bias_derivative
 
-# def update_rule(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWeights, lrBias):
-#     """ Parameters update rule of the gradient descent algorithm. """
-#     new_weights = weights - lrWeights*np.mean(lossWeightsDerivatives, axis=0)
-#     new_bias = bias - lrBias*np.mean(lossBiasDerivatives, axis=0)
-#     return new_weights, new_bias
+
+# def numerical_derivative(func, params, idx, h=1e-5):
+#     params1 = np.copy(params)
+#     params2 = np.copy(params)
+#     params1[idx] += h
+#     params2[idx] -= h
+#     return (func(params1) - func(params2)) / (2 * h)
 #
-# def optimization(loss_derivative: Callable, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs, lrWeights, lrBias, num_shots):
-#     """ Gradient descent optimization. """
-#     # Training set
-#     outputs = np.array([neuron(weights, bias, trainImgs[idx,:,:], num_shots) for idx in range(trainImgs.shape[0])])
+# def spatial_loss_derivative(output, target, weights, bias, Img):
+#     F = output
+#     y = target
+#     norm = np.sqrt(np.sum(np.square(weights)))
 #
-#     losses = np.array([loss(outputs[idx], targets[idx]) for idx in range(outputs.shape[0])])
+#     print('spatial_loss_derivative')
 #
-#     # History initialization
-#     loss_history = [np.mean(losses)]
-#     accuracy_history = [accuracy(outputs, targets)]
+#     def neuron_output(w):
+#         return neuron(w, bias, Img, num_shots=-1)
 #
-#     # Weights initialization
-#     lossWeightsDerivatives = np.zeros(trainImgs.shape)
-#     lossBiasDerivatives = np.zeros(trainImgs.shape[0])
+#     weights_derivative = np.zeros_like(weights)
+#     for i in range(weights.shape[0]):
+#         for j in range(weights.shape[1]):
+#             weights_derivative[i, j] = numerical_derivative(neuron_output, weights, (i, j))
 #
-#     # Compute derivates of the loss function
-#     for idx in range(trainImgs.shape[0]):
-#         lossWeightsDerivatives[idx,:,:], lossBiasDerivatives[idx] = loss_derivative(outputs[idx], targets[idx], weights, bias, trainImgs[idx,:,:])
+#     def neuron_output_bias(b):
+#         return neuron(weights, b, Img, num_shots=-1)
 #
-#     # Validation set
-#     test_outputs = np.array([neuron(weights, bias, testImgs[idx,:,:], num_shots) for idx in range(testImgs.shape[0])])
-#     test_losses = np.array([loss(test_outputs[idx], test_targets[idx]) for idx in range(test_outputs.shape[0])])
+#     bias_derivative = numerical_derivative(neuron_output_bias, np.array([bias]), 0)
 #
-#     test_loss_history = [np.mean(test_losses)]
-#     test_accuracy_history = [accuracy(test_outputs, test_targets)]
+#     crossPrime = (F - y) / (F * (1 - F))
+#     weights_derivative *= crossPrime * sigPrime(F)
+#     bias_derivative *= crossPrime * sigPrime(F)
 #
-#     # Verbose
-#     print('EPOCH', 0)
-#     print('Loss', loss_history[0], 'Val_Loss', test_loss_history[0])
-#     print('Accuracy', accuracy_history[0], 'Val_Acc', test_accuracy_history[0])
-#     print('---')
+#     return weights_derivative, bias_derivative
 #
-#     for epoch in range(num_epochs):
-#         # Update weights
-#         weights, bias = update_rule(weights, bias, lossWeightsDerivatives, lossBiasDerivatives, lrWeights, lrBias)
+# def Fourier_loss_derivative(output, target, weights, bias, Img):
+#     F = output
+#     y = target
+#     norm = np.sqrt(np.sum(np.square(weights)))
 #
-#         # Training set
-#         outputs = np.array([neuron(weights, bias, trainImgs[idx,:,:], num_shots) for idx in range(trainImgs.shape[0])])
-#         losses = np.array([loss(outputs[idx], targets[idx]) for idx in range(outputs.shape[0])])
-#         loss_history.append(np.mean(losses))
+#     def neuron_output(w):
+#         return neuron(w, bias, Img, num_shots=-1)[0]
 #
-#         # Update accuracy
-#         accuracy_history.append(accuracy(outputs, targets))
+#     weights_derivative = np.zeros_like(weights)
+#     for i in range(weights.shape[0]):
+#         for j in range(weights.shape[1]):
+#             weights_derivative[i, j] = numerical_derivative(neuron_output, weights, (i, j))
 #
-#         # Validation set
-#         test_outputs = np.array([neuron(weights, bias, testImgs[idx,:,:], num_shots) for idx in range(testImgs.shape[0])])
-#         test_losses = np.array([loss(test_outputs[idx], test_targets[idx]) for idx in range(test_outputs.shape[0])])
-#         test_loss_history.append(np.mean(test_losses))
-#         test_accuracy_history.append(accuracy(test_outputs, test_targets))
+#     def neuron_output_bias(b):
+#         return neuron(weights, b, Img, num_shots=-1)[0]
 #
-#         # Update loss derivative
-#         for idx in range(trainImgs.shape[0]):
-#             lossWeightsDerivatives[idx,:,:], lossBiasDerivatives[idx] = loss_derivative(outputs[idx], targets[idx], weights, bias, trainImgs[idx,:,:])
+#     bias_derivative = numerical_derivative(neuron_output_bias, np.array([bias]), 0)
 #
-#         # Verbose
-#         print('EPOCH', epoch + 1)
-#         print('Loss', loss_history[epoch + 1], 'Val_Loss', test_loss_history[epoch + 1])
-#         print('Accuracy', accuracy_history[epoch + 1], 'Val_Acc', test_accuracy_history[epoch + 1])
-#         print('---')
+#     crossPrime = (F - y) / (F * (1 - F))
+#     weights_derivative *= crossPrime * sigPrime(F)
+#     bias_derivative *= crossPrime * sigPrime(F)
 #
-#     return weights, bias, loss_history, test_loss_history, accuracy_history, test_accuracy_history
+#     return weights_derivative, bias_derivative
 
 def optimizer(optimizer, loss_derivative: Callable, weights, bias, targets, test_targets, trainImgs, testImgs, num_epochs, lrWeights, lrBias, num_shots):
     if optimizer == 'gd':
@@ -180,6 +213,7 @@ def common_optimization(
     """Common optimization loop."""
     # Training set
     outputs = np.array([neuron(weights, bias, trainImgs[idx, :, :], num_shots) for idx in range(trainImgs.shape[0])])
+
     losses = np.array([loss(outputs[idx], targets[idx]) for idx in range(outputs.shape[0])])
 
     # History initialization
@@ -201,11 +235,11 @@ def common_optimization(
         )
 
     # Validation set
-    test_outputs = np.array([neuron(weights, bias, testImgs[idx, :, :], num_shots) for idx in range(testImgs.shape[0])])
-    test_losses = np.array([loss(test_outputs[idx], test_targets[idx]) for idx in range(test_outputs.shape[0])])
+    neuron_test_outputs = np.array([neuron(weights, bias, testImgs[idx, :, :], num_shots) for idx in range(testImgs.shape[0])])
+    test_losses = np.array([loss(neuron_test_outputs[idx], test_targets[idx]) for idx in range(neuron_test_outputs.shape[0])])
 
     test_loss_history = [np.mean(test_losses)]
-    test_accuracy_history = [accuracy(test_outputs, test_targets)]
+    test_accuracy_history = [accuracy(neuron_test_outputs, test_targets)]
 
     # Verbose
     print('EPOCH', 0)
@@ -220,8 +254,8 @@ def common_optimization(
         )
 
         # Training set
-        outputs = np.array(
-            [neuron(weights, bias, trainImgs[idx, :, :], num_shots) for idx in range(trainImgs.shape[0])])
+        outputs = np.array([neuron(weights, bias, trainImgs[idx, :, :], num_shots) for idx in range(trainImgs.shape[0])])
+
         losses = np.array([loss(outputs[idx], targets[idx]) for idx in range(outputs.shape[0])])
         loss_history.append(np.mean(losses))
 
@@ -229,11 +263,10 @@ def common_optimization(
         accuracy_history.append(accuracy(outputs, targets))
 
         # Validation set
-        test_outputs = np.array(
-            [neuron(weights, bias, testImgs[idx, :, :], num_shots) for idx in range(testImgs.shape[0])])
-        test_losses = np.array([loss(test_outputs[idx], test_targets[idx]) for idx in range(test_outputs.shape[0])])
+        neuron_test_outputs = np.array([neuron(weights, bias, testImgs[idx, :, :], num_shots) for idx in range(testImgs.shape[0])])
+        test_losses = np.array([loss(neuron_test_outputs[idx], test_targets[idx]) for idx in range(neuron_test_outputs.shape[0])])
         test_loss_history.append(np.mean(test_losses))
-        test_accuracy_history.append(accuracy(test_outputs, test_targets))
+        test_accuracy_history.append(accuracy(neuron_test_outputs, test_targets))
 
         # Update loss derivative
         for idx in range(trainImgs.shape[0]):
